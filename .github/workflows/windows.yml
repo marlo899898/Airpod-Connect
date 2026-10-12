@@ -10,19 +10,21 @@ jobs:
   windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 24
           cache: npm
       - run: npm ci
-      - name: Validate PowerShell syntax
-        shell: powershell
+      - name: Test native Windows Bluetooth API
+        shell: pwsh
         run: |
-          $parseErrors = $null
-          $tokens = $null
-          [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PWD 'scripts/bluetooth.ps1'), [ref]$tokens, [ref]$parseErrors) | Out-Null
-          if ($parseErrors.Count -gt 0) { $parseErrors | Out-String | Write-Error; exit 1 }
+          npm run test:bluetooth 2>&1 | Tee-Object -FilePath bluetooth-test.log
+          $testExit = $LASTEXITCODE
+          if ($testExit -ne 0) {
+            Get-Content bluetooth-test.log -Tail 25 | ForEach-Object { Write-Output "::error::$_" }
+            exit $testExit
+          }
       - run: npm test
       - run: npx playwright install chromium
       - run: npm run test:ui
@@ -35,7 +37,16 @@ jobs:
             Get-Content windows-build.log -Tail 30 | ForEach-Object { Write-Output "::error::$_" }
             exit $buildExit
           }
-      - uses: actions/upload-artifact@v4
+      - name: Verify the packaged Bluetooth service and compact window
+        shell: pwsh
+        run: |
+          node scripts/check-packaged.cjs 2>&1 | Tee-Object -FilePath packaged-test.log
+          $testExit = $LASTEXITCODE
+          if ($testExit -ne 0) {
+            Get-Content packaged-test.log -Tail 30 | ForEach-Object { Write-Output "::error::$_" }
+            exit $testExit
+          }
+      - uses: actions/upload-artifact@v5
         with:
           name: Airpod-Connect-Windows
           path: release/*Portable.exe

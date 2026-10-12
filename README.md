@@ -1,104 +1,86 @@
 # Airpod Connect
 
-A Windows companion for AirPods, with warm amber accents, a charcoal interface, real product renders, and gentle floating animations. Built with Electron, React, and TypeScript.
+A small Windows companion for AirPods. Version **0.2.0** replaces PowerShell discovery with native Windows Bluetooth APIs and replaces the dashboard with a compact control panel.
 
-## Download the Windows app
+## Download and update
 
 1. Sign into GitHub and open [Windows builds](https://github.com/marlo899898/Airpod-Connect/actions/workflows/windows.yml).
 2. Open the latest successful **Validate and build Windows** run.
-3. Scroll to **Artifacts** and download **Airpod-Connect-Windows**.
-4. Extract the ZIP, then run `Airpod-Connect-0.1.0-Portable.exe` on Windows. No installation is needed.
+3. Under **Artifacts**, download **Airpod-Connect-Windows** and extract the ZIP.
+4. **Quit the old copy from its system tray menu first.** Run `Airpod-Connect-0.2.0-Portable.exe` on Windows 10/11 (x64).
 
-GitHub requires sign-in to download Actions artifacts. The executable is unsigned. Source files are available from this repository's **Code → Download ZIP** menu. Links beginning with `/workspace/` in a cloud chat refer to that workspace and are not public download links.
+No installation, administrator access, or PowerShell policy change is required. The executable is unsigned. GitHub requires sign-in for artifact downloads. Source is available through **Code → Download ZIP**; cloud `/workspace/` links are not public downloads.
 
-## What it does
+## Everyday use
 
-- Detects paired and connected Bluetooth devices on Windows 10/11 through WinRT, polling every 8 seconds without administrator access.
-- Recognizes AirPods names conservatively. A saved model override handles ambiguous generations or renamed devices.
-- Opens automatically and shows a notification when AirPods connect. Closing the window keeps discovery active in the system tray; use **Quit** in the tray menu to exit.
-- Adapts the listening-mode cards to the selected model: standard AirPods, AirPods 4 with ANC, AirPods Pro generations, and AirPods Max.
-- Opens Windows Bluetooth and Sound settings for pairing, volume, and audio output.
-- Saves dark, light, or system theme preferences, connection behavior, and installed-app launch at login locally.
-- Includes an explicitly labeled, interactive preview for development without Windows hardware. The Windows desktop app starts with live detection, never sample data.
+Open Windows Bluetooth settings from the connection screen and pair your AirPods. The app checks the native connected flag every 5 seconds. As soon as a selected or recognized pair connects—including one already connected at startup—the large connection screen is replaced with a **430 × 250** panel containing the device name and its listening modes.
 
-## Current hardware limitations
+The compact panel has no navigation, battery cards, artwork, marketing text, or settings section. Close it to keep detection in the system tray. Right-click the tray icon for **Preferences & model**, Bluetooth settings, or Quit. Disconnecting restores the connection screen; a subsequent connection returns to compact controls. Repeated scans do not interrupt an open preferences page.
 
-**This version does not send noise-mode commands to AirPods.** Windows' standard Bluetooth APIs do not expose Apple's proprietary control protocol. In live mode, each listening-mode card explains how to switch using the stem or AirPods Max button. The app does not claim to read the current hardware mode. Adaptive Audio requires a compatible model, firmware, and configuration on an Apple device.
+Preferences include dark (default), light, and system themes, model choice, automatic opening, and notifications. Renamed devices can be selected from **Choose a paired device**. Model inference is conservative: an unspecified AirPods Pro generation does not acquire Adaptive Audio automatically.
 
-Individual earbud and case battery percentages are not exposed by the discovery implementation. Live mode shows unavailable values; all percentages in preview mode are illustrative. Adding actual noise switching or battery telemetry requires a separately implemented and hardware-tested Bluetooth transport (potentially a Windows driver). No unverified commands or driver installers are included.
+## Noise-control limitation
 
-Model inference uses the Bluetooth name, not verified hardware identity. “AirPods Pro” alone does not enable Adaptive Audio; select the exact generation in the model chooser. Unknown models do not receive guessed features. AirPods 4 defaults to the non-ANC variant unless its name or your model choice identifies ANC.
+**Direct noise-mode switching is not implemented.** The standard Win32 Bluetooth API used here exposes discovery and connection status, not Apple's proprietary control protocol. Live listening-mode buttons display concise instructions for the AirPods stem or Max noise-control button. They do not send commands or claim to read the active hardware mode. A single availability line remains in the compact panel to make this clear.
 
-## Develop
+Adaptive Audio needs a compatible model, firmware, and prior configuration on an Apple device. Plain AirPods 1–4 have no noise-control buttons; AirPods 4 with ANC, Pro variants, and Max receive their appropriate modes. Unknown devices require a model choice.
 
-Use Node.js 22.12+ (Node 24 recommended) and npm. Keep the existing checkout; there is no need for a Git worktree.
+Browser preview is opt-in and explicitly labeled. Only in preview can mode selection be simulated. There are no fake battery levels or automatic demo devices in live mode.
+
+## Develop and test
+
+Use Node.js 24 and npm in the existing checkout; no Git worktree is needed.
 
 ```sh
 npm ci
 npm run build
 npm test
-```
-
-On Windows, run the desktop app:
-
-```sh
-npm run desktop
-```
-
-This starts Vite and Electron together. Enable Bluetooth, pair your AirPods in Windows Settings, and connect them. Windows PowerShell 5.1 is included with supported Windows versions. A machine policy that blocks local PowerShell scripts can prevent discovery; the app reports that error and does not alter the policy. Launch at login is available after installing the packaged app.
-
-For browser-only UI development:
-
-```sh
 npm run dev
 ```
 
-The browser opens in labeled preview mode. **Use my AirPods** exits the preview and explains that live detection needs the Windows app. Browser-only code never asks for Web Bluetooth access or pretends to scan hardware.
-
-## Validate
+`npm run dev` runs the browser UI, with an explicit **Preview compact controls** button. Live detection requires Windows. On Windows, `npm run desktop` runs Electron and Vite together. The native discovery library (Koffi) has a prebuilt Windows x64 Node-API addon; no compiler, .NET runtime, PowerShell, or special driver is needed on the user's machine.
 
 ```sh
-npm test
 npx playwright install chromium
 npm run test:ui
-npm run build
 ```
 
-Unit tests cover model capabilities, preference validation, device selection, reconnection transitions, and scan failures. Playwright checks preview isolation, model-specific controls, persisted preferences, a mocked Windows bridge, product asset loading, and responsive layout. Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` to reuse an installed Chromium for UI tests.
+To reuse an installed browser, set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH`. Unit tests cover Win32 structure sizes, native handle cleanup, UTF-16 names, connected/paired distinctions, Windows error reporting, model capabilities, preferences, connection transitions, and compact window bounds. Browser tests check first-connect behavior, disconnect/reconnect, tray preferences, themes, error messages, and the actual compact viewport.
 
-See [Windows hardware checks](docs/WINDOWS-VALIDATION.md) before treating Bluetooth behavior as verified. Linux UI and packaging checks cannot validate a physical Windows Bluetooth connection.
-
-## Build a Windows installer
+On Windows, also run:
 
 ```sh
-npm run dist:win
+npm run test:bluetooth
+npm run dist:win:portable
+node scripts/check-packaged.cjs
 ```
 
-Run on Windows for executable icon and metadata processing. The x64 NSIS installer is written to `release/Airpod-Connect-0.1.0-Setup.exe`. No signing certificate is included.
+The first command actually loads `bthprops.cpl` and calls the Win32 APIs. No adapter is an explicit valid outcome. The packaged test launches the built executable, invokes its real utility-process scanner, and checks the actual window transition using a simulated connection event. Neither test substitutes for testing physical AirPods; see [Windows hardware validation](docs/WINDOWS-VALIDATION.md).
 
-A standalone Windows executable can also be cross-built on Linux:
+## Windows builds
+
+Build on Windows so npm installs the Windows Koffi addon:
 
 ```sh
 npm run dist:win:portable
 ```
 
-This writes `release/Airpod-Connect-0.1.0-Portable.exe`. It needs no installer and disables launch at login because the runtime is extracted to a temporary path. The cross-build skips executable resource editing and signing; the application executable retains Electron's embedded metadata, while the taskbar and tray use the app icon. The portable executable is unsigned, so Windows may display its normal unrecognized-publisher prompt. The installed build is recommended for Windows notification integration and launch at login.
+The output is `release/Airpod-Connect-0.2.0-Portable.exe`. CI runs the native and browser checks, builds it, verifies the packaged scanner, then uploads the download. Native binaries are explicitly unpacked from Electron's ASAR archive. Linux supports UI development and unit tests; do not ship a Linux-produced archive containing only the Linux native addon.
 
-The cloud NSIS attempt could not finish because the Wine toolset failed to load `ntdll`. Generate the installer on Windows with `npm run dist:win`; the portable build does not need Wine.
+An NSIS installer target (`npm run dist:win`) is also defined, but the published and tested download is the portable executable. No signing credentials or release publishing are configured. Login startup is unavailable for the portable app because its runtime is extracted to a temporary directory.
 
-The GitHub Actions workflow builds and uploads the standalone Windows executable when pushed or manually triggered. It does not publish a release or configure signing credentials.
+## Implementation
 
-## Architecture
+- `electron/windows-bluetooth.cjs`: documented Win32 discovery using `BluetoothFindFirstRadio`, `BluetoothFindFirstDevice`, and `BluetoothFindNextDevice`. Reads `fConnected`; pairing alone never implies connection. No inquiry or device changes are performed.
+- `electron/bluetooth-worker.cjs`: isolated Electron utility process, with a 10-second parent timeout.
+- `electron/main.cjs`: scanner scheduling, narrow IPC, tray, window sizing, and notifications.
+- `electron/window-layout.cjs`: compact sizing and monitor work-area clamping.
+- `src/App.tsx`: simple setup, preferences, and compact listening modes.
 
-- `electron/main.cjs`: isolated desktop host, system shortcuts, tray, notifications, login preference, and a deduplicated Bluetooth scan loop.
-- `electron/preload.cjs`: narrow IPC bridge; no renderer Node.js access or arbitrary shell commands.
-- `scripts/bluetooth.ps1`: read-only WinRT enumeration and actual `ConnectionStatus`, with timeouts and disposed device handles.
-- `electron/device-monitor.cjs`: connection transition logic that ignores failed scans and avoids repeated notifications.
-- `src/domain.ts`: conservative model capabilities and device selection.
-- `src/App.tsx`, `src/styles.css`: interface, themes, reduced-motion support, keyboard-accessible dialogs, and explicit preview state.
+The old script's generic fallback could blame PowerShell policy for initialization or parsing failures. Version 0.2.0 removes that entire dependency; native failures now retain their Windows error code. No policy is changed, bypassed, or disabled.
 
-Discovery stays on the computer. There are no accounts, analytics, external runtime image requests, or required API keys. Bluetooth identifiers and preferences are stored locally. The app uses a locked-down renderer, production Content Security Policy, and validated system-settings targets.
+There are no accounts, analytics, external runtime images, or API keys. Preferences stay on the device. The renderer uses context isolation, a sandboxed preload, and a production Content Security Policy.
 
 ## Credits
 
-This is an independent project, not affiliated with Apple. AirPods is an Apple trademark. Real AirPods product renders are bundled from [SpriteOvO/AirPodsDesktop](https://github.com/SpriteOvO/AirPodsDesktop), commit `56b04001f75044dbd15507303a9438c71e93c6e4`, under its GPL-3.0 notice. No application code was copied from that project. Inter is by Rasmus Andersson under SIL OFL 1.1. Included attribution and full license texts are in `public/licenses/`; they are shipped in the app. See [asset provenance](public/licenses/ASSETS.md).
+Independent of Apple. AirPods is an Apple trademark. Product renders are from [SpriteOvO/AirPodsDesktop](https://github.com/SpriteOvO/AirPodsDesktop), commit `56b04001f75044dbd15507303a9438c71e93c6e4`, with its GPL-3.0 notice. Inter is by Rasmus Andersson under SIL OFL 1.1. Asset provenance and licenses are in `public/licenses/`. Koffi is by Niels Martignène under MIT; its license is bundled with the dependency.

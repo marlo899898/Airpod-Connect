@@ -32,7 +32,7 @@ export function inferModel(name: string): ModelId {
   return 'unknown';
 }
 export interface BluetoothDevice { id: string; name: string; connected: boolean; }
-export interface ScanResult { devices: BluetoothDevice[]; error?: string; platform: string; scannedAt: number; }
+export interface ScanResult { devices: BluetoothDevice[]; adapterAvailable?: boolean; error?: string; platform: string; scannedAt: number; }
 export function selectDevice(devices: BluetoothDevice[], preferredId?: string): BluetoothDevice | undefined {
   return devices.find(d => d.id === preferredId && d.connected)
     ?? devices.find(d => /air\s*pods/i.test(d.name) && d.connected)

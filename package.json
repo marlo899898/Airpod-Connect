@@ -1,6 +1,6 @@
 {
   "name": "airpod-connect",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "A warm, minimal Windows companion for AirPods.",
   "author": "Airpod Connect contributors",
@@ -13,9 +13,11 @@
     "test:ui": "playwright test",
     "dist:win": "npm run build && electron-builder --win nsis --x64",
     "preview": "vite preview --host 127.0.0.1 --port 4173 --strictPort",
-    "dist:win:portable": "npm run build && electron-builder --win portable --x64 -c.win.signAndEditExecutable=false"
+    "dist:win:portable": "npm run build && electron-builder --win portable --x64 -c.win.signAndEditExecutable=false",
+    "test:bluetooth": "node scripts/check-bluetooth.cjs"
   },
   "dependencies": {
+    "koffi": "^3.3.3",
     "lucide-react": "^0.468.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
@@ -45,12 +47,6 @@
       "electron/**/*",
       "package.json"
     ],
-    "extraResources": [
-      {
-        "from": "scripts/bluetooth.ps1",
-        "to": "bluetooth.ps1"
-      }
-    ],
     "win": {
       "target": "nsis",
       "artifactName": "Airpod-Connect-${version}-Setup.${ext}",
@@ -63,7 +59,11 @@
     },
     "portable": {
       "artifactName": "Airpod-Connect-${version}-Portable.${ext}"
-    }
+    },
+    "asarUnpack": [
+      "node_modules/koffi/**",
+      "node_modules/@koromix/**"
+    ]
   },
   "engines": {
     "node": ">=22.12.0"

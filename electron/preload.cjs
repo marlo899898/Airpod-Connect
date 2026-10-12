@@ -7,6 +7,12 @@ contextBridge.exposeInMainWorld('airpod', {
     ipcRenderer.on('bluetooth:devices', listener);
     return () => ipcRenderer.removeListener('bluetooth:devices', listener);
   },
+  setView: view => ipcRenderer.invoke('window:view', view),
+  onPreferences: callback => {
+    const listener = () => callback();
+    ipcRenderer.on('window:preferences', listener);
+    return () => ipcRenderer.removeListener('window:preferences', listener);
+  },
   settings: target => ipcRenderer.invoke('windows:settings', target),
   configure: prefs => ipcRenderer.invoke('app:configure', prefs),
   minimize: () => ipcRenderer.send('window:minimize'),

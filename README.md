@@ -2,6 +2,15 @@
 
 A Windows companion for AirPods, with warm amber accents, a charcoal interface, real product renders, and gentle floating animations. Built with Electron, React, and TypeScript.
 
+## Download the Windows app
+
+1. Sign into GitHub and open [Windows builds](https://github.com/marlo899898/Airpod-Connect/actions/workflows/windows.yml).
+2. Open the latest successful **Validate and build Windows** run.
+3. Scroll to **Artifacts** and download **Airpod-Connect-Windows**.
+4. Extract the ZIP, then run `Airpod-Connect-0.1.0-Setup.exe` on Windows.
+
+GitHub requires sign-in to download Actions artifacts. The installer is unsigned. Source files are available from this repository's **Code → Download ZIP** menu. Links beginning with `/workspace/` in a cloud chat refer to that workspace and are not public download links.
+
 ## What it does
 
 - Detects paired and connected Bluetooth devices on Windows 10/11 through WinRT, polling every 8 seconds without administrator access.

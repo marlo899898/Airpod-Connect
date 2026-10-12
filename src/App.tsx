@@ -1,13 +1,15 @@
-import { useEffect, useState, type CSSProperties } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { ArrowLeft, AudioLines, Bluetooth, Check, ChevronRight, Ear, Minus, Moon, Power, RefreshCw, Settings2, Sparkles, Sun, X, Monitor } from 'lucide-react';
 import { MODELS, defaults, inferModel, readPreferences, selectDevice, type ModelId, type NoiseMode, type Preferences, type ScanResult } from './domain';
 
+import type { NoiseState } from './native';
+const idleNoise: NoiseState = { deviceId: null, status: 'disconnected', mode: null, error: null };
 const demo = { id: 'preview', name: 'AirPods Pro', connected: true };
 const modes = {
-  cancellation: { name: 'Noise cancelling', icon: AudioLines, help: 'Press and hold an AirPod stem to switch to Noise Cancellation. On Max, use the noise control button.' },
-  transparency: { name: 'Transparency', icon: Ear, help: 'Press and hold an AirPod stem to switch to Transparency. On Max, use the noise control button.' },
-  adaptive: { name: 'Adaptive', icon: Sparkles, help: 'Add Adaptive Audio to the stem’s listening-mode cycle in AirPods settings on an Apple device, then use the stem to switch.' },
-  off: { name: 'Off', icon: Power, help: 'Add Off to your listening-mode cycle in AirPods settings on an Apple device, then use the stem or Max button to switch.' },
+  cancellation: { name: 'Noise cancelling', icon: AudioLines },
+  transparency: { name: 'Transparency', icon: Ear },
+  adaptive: { name: 'Adaptive', icon: Sparkles },
+  off: { name: 'Off', icon: Power },
 };
 type Page = 'setup' | 'compact' | 'settings';
 function loadPreferences() {
@@ -22,7 +24,10 @@ export default function App() {
   const [page, setPage] = useState<Page>('setup');
   const [scanning, setScanning] = useState(false);
   const [sampleMode, setSampleMode] = useState<NoiseMode>('cancellation');
-  const [help, setHelp] = useState('');
+  const [noise, setNoise] = useState<NoiseState>(idleNoise);
+  const [pendingMode, setPendingMode] = useState<NoiseMode | null>(null);
+  const [controlError, setControlError] = useState('');
+  const controlGeneration = useRef(0);
   const [message, setMessage] = useState('');
   const [systemDark, setSystemDark] = useState(() => matchMedia('(prefers-color-scheme: dark)').matches);
   const device = preview ? demo : selectDevice(scan.devices, prefs.preferredDevice);
@@ -47,9 +52,43 @@ export default function App() {
   }, []);
   // React only to actual connection changes; repeated scans must not dismiss settings.
   useEffect(() => {
-    setHelp('');
     setPage(connected ? 'compact' : 'setup');
   }, [device?.id, connected, preview]);
+  useEffect(() => {
+    const bridge = window.airpod;
+    const generation = ++controlGeneration.current;
+    setNoise(idleNoise); setPendingMode(null); setControlError('');
+    if (!bridge || preview || !device?.connected || !model.modes.length) {
+      bridge?.disconnectControls().catch(() => {});
+      return;
+    }
+    const id = device.id;
+    const accept = (state: NoiseState) => {
+      if (generation === controlGeneration.current && (state.deviceId === id || state.status === 'disconnected')) setNoise(state);
+    };
+    const unsubscribe = bridge.onNoiseState(accept);
+    bridge.connectControls(id).then(accept).catch(error => {
+      if (generation === controlGeneration.current) setNoise({ ...idleNoise, deviceId: id, status: 'error', error: String(error.message) });
+    });
+    return () => { ++controlGeneration.current; unsubscribe(); bridge.disconnectControls().catch(() => {}); };
+  }, [device?.id, connected, preview, modelId]);
+  async function retryControls() {
+    if (!window.airpod || !device) return;
+    const generation = controlGeneration.current;
+    setControlError('');
+    setNoise({ ...idleNoise, deviceId: device.id, status: 'connecting' });
+    try { const state = await window.airpod.connectControls(device.id); if (generation === controlGeneration.current) setNoise(state); }
+    catch (error) { if (generation === controlGeneration.current) setNoise({ ...idleNoise, deviceId: device.id, status: 'error', error: String((error as Error).message) }); }
+  }
+  async function changeMode(mode: NoiseMode) {
+    if (preview) { setSampleMode(mode); return; }
+    if (!window.airpod || !device || pendingMode || noise.status !== 'ready') return;
+    const generation = controlGeneration.current;
+    setPendingMode(mode); setControlError('');
+    try { await window.airpod.setNoiseMode(device.id, mode); }
+    catch (error) { if (generation === controlGeneration.current) setControlError(String((error as Error).message).replace(/^Error invoking remote method '[^']+': Error: /, '')); }
+    finally { if (generation === controlGeneration.current) setPendingMode(null); }
+  }
   useEffect(() => {
     document.documentElement.dataset.view = page === 'compact' ? 'compact' : 'setup';
     window.airpod?.setView(page === 'compact' ? 'compact' : 'setup').catch(() => setMessage('The window could not be resized. Restart the app to restore the compact layout.'));
@@ -80,7 +119,6 @@ export default function App() {
   }, [message]);
   useEffect(() => {
     if (!model.modes.includes(sampleMode) && model.modes.length) setSampleMode(model.modes[0]);
-    setHelp('');
   }, [modelId]);
   function update<K extends keyof Preferences>(key: K, value: Preferences[K]) { setPrefs(p => ({ ...p, [key]: value })); }
   function chooseModel(value: ModelId) {
@@ -109,14 +147,18 @@ export default function App() {
       <div className="compact-modes" style={{ '--count': model.modes.length } as CSSProperties}>
         {model.modes.map(id => {
           const Icon = modes[id].icon;
-          const selected = preview && sampleMode === id;
-          return <button key={id} className={`noise-mode ${selected ? 'selected' : ''}`} aria-label={`${modes[id].name}${preview ? '' : ' instructions'}`} aria-pressed={selected}
-            onClick={() => { if (preview) setSampleMode(id); else setHelp(modes[id].help); }}>
-            <Icon size={23} strokeWidth={1.65} /><span>{modes[id].name}</span>{selected && <i><Check size={9} /></i>}
+          const selected = preview ? sampleMode === id : noise.status === 'ready' && noise.deviceId === device?.id && noise.mode === id;
+          return <button key={id} className={`noise-mode ${selected ? 'selected' : ''}`} aria-label={modes[id].name} aria-pressed={selected} aria-busy={!preview && pendingMode === id} disabled={!preview && (noise.status !== 'ready' || pendingMode !== null)}
+            onClick={() => changeMode(id)}>
+            {pendingMode === id ? <RefreshCw size={23} className="spin" /> : <Icon size={23} strokeWidth={1.65} />}<span>{modes[id].name}</span>{selected && <i><Check size={9} /></i>}
           </button>;
         })}
       </div>
-      <p className="control-note" role="status">{help || (preview ? 'Preview only — no command is sent to AirPods.' : 'Switch on your AirPods. Direct switching isn’t available in this app.')}</p>
+      <div className="control-note" role="status">
+        {preview ? 'Preview only — no command is sent to AirPods.' : pendingMode ? 'Waiting for AirPods…' : controlError || (noise.status === 'ready' ? '' : noise.status === 'driver-missing' ? 'Control driver required.' : noise.status === 'connecting' ? 'Connecting controls…' : noise.error || 'Controls disconnected.')}
+        {!preview && noise.status === 'driver-missing' && <button onClick={() => window.airpod?.driverInfo().catch(() => setControlError('Open Preferences for driver information.'))}>Driver details</button>}
+        {!preview && ['driver-missing', 'error', 'disconnected'].includes(noise.status) && <button onClick={retryControls}>Retry</button>}
+      </div>
     </> : <div className="compact-empty">
       <p>{modelId === 'unknown' ? 'Choose your model to see its listening modes.' : 'This model does not support noise control.'}</p>
       <button className="text-button" onClick={() => setPage('settings')}>{modelId === 'unknown' ? 'Choose model' : 'Preferences'}<ChevronRight size={14} /></button>
@@ -149,7 +191,8 @@ export default function App() {
       <div className="setting-block"><span className="field-label">Appearance</span><div className="theme-options">{([{ id: 'dark', label: 'Dark', icon: Moon }, { id: 'light', label: 'Light', icon: Sun }, { id: 'system', label: 'System', icon: Monitor }] as const).map(t => <button key={t.id} aria-pressed={prefs.theme === t.id} onClick={() => update('theme', t.id)}><t.icon size={16} />{t.label}</button>)}</div></div>
       <div className="setting-row"><label htmlFor="auto-open">Open controls when AirPods connect</label><button id="auto-open" role="switch" aria-checked={prefs.autoOpen} aria-label="Open controls on connection" className={`toggle ${prefs.autoOpen ? 'on' : ''}`} onClick={() => update('autoOpen', !prefs.autoOpen)}><span /></button></div>
       <div className="setting-row"><label htmlFor="notifications">Connection notifications</label><button id="notifications" role="switch" aria-checked={prefs.notifications} aria-label="Connection notifications" className={`toggle ${prefs.notifications ? 'on' : ''}`} onClick={() => update('notifications', !prefs.notifications)}><span /></button></div>
-      <details className="about"><summary>About this app</summary><p>Airpod Connect 0.2.0. Detection uses native Windows Bluetooth; no PowerShell or administrator access is required.</p><p>Noise-mode buttons show physical-control instructions. This app does not send Apple’s proprietary noise-mode commands or read the active mode. No battery estimates or sample devices appear in live mode.</p><p>Independent of Apple. Product renders: SpriteOvO/AirPodsDesktop (GPL-3.0). Inter: Rasmus Andersson (SIL OFL). Notices are bundled.</p></details>
+      <div className="setting-block"><button className="text-button" onClick={() => window.airpod?.driverInfo()}>Noise-control driver requirements<ChevronRight size={14} /></button></div>
+      <details className="about"><summary>About this app</summary><p>Airpod Connect 0.3.0. Detection uses native Windows Bluetooth; no PowerShell or administrator access is required.</p><p>Live noise control requires a separately installed MagicAAP driver. Buttons send commands and highlight the mode reported by AirPods. The driver publisher currently requires Windows security changes; review the requirements before considering installation. This app does not install drivers or change Windows security settings.</p><p>Independent of Apple. Product renders: SpriteOvO/AirPodsDesktop (GPL-3.0). Inter: Rasmus Andersson (SIL OFL). Notices are bundled.</p></details>
       {preview && <button className="text-button" onClick={() => setPreview(false)}>Exit preview</button>}
     </section>}
     {message && <div className="toast" role="status">{message}<button aria-label="Dismiss message" onClick={() => setMessage('')}><X size={14} /></button></div>}

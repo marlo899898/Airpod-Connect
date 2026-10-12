@@ -1,6 +1,15 @@
 const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('airpod', {
   platform: process.platform,
+  connectControls: deviceId => ipcRenderer.invoke('noise:connect', deviceId),
+  disconnectControls: () => ipcRenderer.invoke('noise:disconnect'),
+  setNoiseMode: (deviceId, mode) => ipcRenderer.invoke('noise:set', deviceId, mode),
+  driverInfo: () => ipcRenderer.invoke('noise:driver-info'),
+  onNoiseState: callback => {
+    const listener = (_event, data) => callback(data);
+    ipcRenderer.on('noise:state', listener);
+    return () => ipcRenderer.removeListener('noise:state', listener);
+  },
   scan: () => ipcRenderer.invoke('bluetooth:scan'),
   onDevices: callback => {
     const listener = (_event, data) => callback(data);

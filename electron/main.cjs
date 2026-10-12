@@ -1,6 +1,12 @@
 const { app, BrowserWindow, ipcMain, shell, Notification, Tray, Menu, nativeImage, utilityProcess, screen } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
+const { NoiseService } = require('./noise-service.cjs');
+const noise = new NoiseService(
+  deviceId => utilityProcess.fork(path.join(__dirname, 'noise-worker.cjs'), [deviceId], { serviceName: 'AirPods Controls', stdio: 'pipe' }),
+  state => { if (window && !window.isDestroyed()) window.webContents.send('noise:state', state); },
+);
+let connectedDevices = [];
 const { updateConnections } = require('./device-monitor.cjs');
 const { windowBounds, SIZES } = require('./window-layout.cjs');
 let window, tray, timer, scanPromise, activeWorker, quitting = false;
@@ -52,6 +58,10 @@ function scan() {
   if (scanPromise) return scanPromise;
   if (process.platform !== 'win32') return Promise.resolve({ devices: [], platform: process.platform, scannedAt: Date.now(), error: 'Live Bluetooth detection requires Windows 10 or 11.' });
   scanPromise = queryBluetooth().then(result => {
+    if (!result.error) {
+      connectedDevices = result.devices.filter(d => d.connected);
+      if (noise.state.deviceId && !connectedDevices.some(d => d.id === noise.state.deviceId)) noise.disconnect();
+    }
     result.platform = process.platform;
     result.scannedAt = Date.now();
     const transition = updateConnections(previous, result, preferences.preferredDevice);
@@ -85,6 +95,16 @@ else {
     app.setAppUserModelId('com.airpodconnect.desktop');
     try { const stored = JSON.parse(fs.readFileSync(configPath(), 'utf8')); preferences = { ...preferences, ...stored }; } catch {}
     ipcMain.handle('bluetooth:scan', scan);
+    ipcMain.handle('noise:connect', (_event, deviceId) => {
+      if (process.platform !== 'win32' || !connectedDevices.some(d => d.id === deviceId)) throw new Error('Connect these AirPods to Windows first.');
+      return noise.connect(deviceId);
+    });
+    ipcMain.handle('noise:disconnect', () => noise.disconnect());
+    ipcMain.handle('noise:set', (_event, deviceId, mode) => {
+      if (!connectedDevices.some(d => d.id === deviceId)) throw new Error('AirPods are disconnected.');
+      return noise.setMode(deviceId, mode);
+    });
+    ipcMain.handle('noise:driver-info', () => shell.openExternal('https://github.com/marlo899898/Airpod-Connect/blob/main/docs/NOISE-CONTROL.md'));
     ipcMain.handle('window:view', (_event, view) => setView(view));
     ipcMain.handle('windows:settings', (_event, target) => {
       if (!['bluetooth', 'sound'].includes(target) || process.platform !== 'win32') throw new Error('This shortcut is available in the Windows app.');
@@ -117,5 +137,5 @@ else {
     scan();
   });
 }
-app.on('before-quit', () => { quitting = true; clearInterval(timer); activeWorker?.kill(); });
+app.on('before-quit', () => { quitting = true; clearInterval(timer); activeWorker?.kill(); noise.disconnect(); });
 app.on('window-all-closed', () => { if (!tray) app.quit(); });

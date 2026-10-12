@@ -111,3 +111,5 @@ select { width: 100%; background: var(--panel); border: 1px solid var(--line); b
   .settings-screen { padding: 10px 24px 26px; }
 }
 @media(prefers-reduced-motion:reduce) { *, *::before, *::after { animation: none!important; transition: none!important; } }
+.control-note button { color: var(--amber); text-decoration: underline; margin-left: 9px; padding: 0; }
+.noise-mode:disabled:hover { background: var(--panel); border-color: var(--line); }

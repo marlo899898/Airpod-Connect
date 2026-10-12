@@ -7,9 +7,9 @@ A Windows companion for AirPods, with warm amber accents, a charcoal interface, 
 1. Sign into GitHub and open [Windows builds](https://github.com/marlo899898/Airpod-Connect/actions/workflows/windows.yml).
 2. Open the latest successful **Validate and build Windows** run.
 3. Scroll to **Artifacts** and download **Airpod-Connect-Windows**.
-4. Extract the ZIP, then run `Airpod-Connect-0.1.0-Setup.exe` on Windows.
+4. Extract the ZIP, then run `Airpod-Connect-0.1.0-Portable.exe` on Windows. No installation is needed.
 
-GitHub requires sign-in to download Actions artifacts. The installer is unsigned. Source files are available from this repository's **Code → Download ZIP** menu. Links beginning with `/workspace/` in a cloud chat refer to that workspace and are not public download links.
+GitHub requires sign-in to download Actions artifacts. The executable is unsigned. Source files are available from this repository's **Code → Download ZIP** menu. Links beginning with `/workspace/` in a cloud chat refer to that workspace and are not public download links.
 
 ## What it does
 
@@ -86,7 +86,7 @@ This writes `release/Airpod-Connect-0.1.0-Portable.exe`. It needs no installer a
 
 The cloud NSIS attempt could not finish because the Wine toolset failed to load `ntdll`. Generate the installer on Windows with `npm run dist:win`; the portable build does not need Wine.
 
-The GitHub Actions workflow builds and uploads a Windows installer when pushed or manually triggered. It does not publish a release or configure signing credentials.
+The GitHub Actions workflow builds and uploads the standalone Windows executable when pushed or manually triggered. It does not publish a release or configure signing credentials.
 
 ## Architecture
 

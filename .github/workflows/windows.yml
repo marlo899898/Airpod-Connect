@@ -26,9 +26,17 @@ jobs:
       - run: npm test
       - run: npx playwright install chromium
       - run: npm run test:ui
-      - run: npm run dist:win
+      - name: Build standalone Windows app
+        shell: pwsh
+        run: |
+          npm run dist:win:portable 2>&1 | Tee-Object -FilePath windows-build.log
+          $buildExit = $LASTEXITCODE
+          if ($buildExit -ne 0) {
+            Get-Content windows-build.log -Tail 30 | ForEach-Object { Write-Output "::error::$_" }
+            exit $buildExit
+          }
       - uses: actions/upload-artifact@v4
         with:
           name: Airpod-Connect-Windows
-          path: release/*Setup.exe
+          path: release/*Portable.exe
           if-no-files-found: error
